@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
 import StatusBadge from '../../components/StatusBadge';
+import { imageUrl } from '../../utils/imageUrl';
 import api from '../../services/api';
 
 export default function HospitalDetail() {
@@ -42,14 +43,14 @@ export default function HospitalDetail() {
         <Link to="/patient" className="text-blue-600 text-sm mb-4 inline-block">&larr; Back</Link>
 
         {hospital.images?.[0] && (
-          <img src={hospital.images[0]} alt={hospital.name} className="w-full h-48 object-cover rounded-xl mb-6" />
+          <img src={imageUrl(hospital.images[0])} alt={hospital.name} className="w-full h-48 object-cover rounded-xl mb-6" />
         )}
 
         <div className="flex items-center gap-3 mb-4">
           <h1 className="text-2xl font-bold">{hospital.name}</h1>
           <StatusBadge status={hospital.type === 'government' ? 'available' : 'busy'} />
         </div>
-        <p className="text-gray-600 mb-4 capitalize">{hospital.type} Hospital</p>
+        <p className="text-gray-600 mb-4 capitalize">{hospital.type} Hospital · {hospital.city}</p>
         <p className="text-gray-700 mb-6">{hospital.description}</p>
 
         {hospital.specialties?.length > 0 && (

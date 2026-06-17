@@ -49,6 +49,9 @@ export default function HospitalLogin() {
             {loading ? 'Please wait...' : 'Login'}
           </button>
         </form>
+        <Link to="/register/hospital" className="mt-4 text-sm text-green-600 w-full text-center block">
+          New hospital? Register here
+        </Link>
       </div>
     </div>
   );

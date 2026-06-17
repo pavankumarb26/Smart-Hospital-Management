@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   getNearbyHospitals,
+  getCities,
   getHospitalById,
   getHospitalResources,
   getOPStatus,
@@ -9,8 +10,9 @@ const {
 const router = express.Router();
 
 router.get('/nearby', getNearbyHospitals);
-router.get('/:id', getHospitalById);
+router.get('/cities', getCities);
 router.get('/:id/resources', getHospitalResources);
 router.get('/:id/op-status', getOPStatus);
+router.get('/:id', getHospitalById);
 
 module.exports = router;

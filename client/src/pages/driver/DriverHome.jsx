@@ -25,7 +25,10 @@ export default function DriverHome() {
 
   useEffect(() => {
     const unsub = subscribe('ambulance:request', (data) => setRideRequest(data));
-    return unsub;
+    const unsub2 = subscribe('ambulance:priorityAlert', (data) => {
+      setRideRequest((prev) => prev || { requestId: data.requestId, priority: true, message: data.message });
+    });
+    return () => { unsub(); unsub2(); };
   }, []);
 
   useEffect(() => {

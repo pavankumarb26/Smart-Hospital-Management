@@ -19,6 +19,7 @@ export default function Navbar({ portal }) {
     hospital: [
       { to: '/hospital', label: 'Dashboard' },
       { to: '/hospital/beds', label: 'Beds' },
+      { to: '/hospital/print-qr', label: 'Print QR' },
       { to: '/hospital/requests', label: 'Requests' },
       { to: '/hospital/scan', label: 'Scan QR' },
       { to: '/hospital/ambulances', label: 'Fleet' },

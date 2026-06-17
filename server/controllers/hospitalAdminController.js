@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const Hospital = require('../models/Hospital');
 const Bed = require('../models/Bed');
 const BedRequest = require('../models/BedRequest');
@@ -5,6 +6,7 @@ const OPBooking = require('../models/OPBooking');
 const Ambulance = require('../models/Ambulance');
 const { getBedStats } = require('../utils/bedHelpers');
 const { generateBedQR } = require('../utils/qrGenerator');
+const { addBedsToHospital } = require('../utils/bedFactory');
 
 const getDashboard = async (req, res, next) => {
   try {
@@ -31,6 +33,8 @@ const getDashboard = async (req, res, next) => {
       opBookingsToday,
       opCapacity: hospital.dailyOPCapacity,
       opFull: opBookingsToday >= hospital.dailyOPCapacity,
+      approvalStatus: hospital.approvalStatus,
+      hospitalName: hospital.name,
     });
   } catch (error) {
     next(error);
@@ -104,7 +108,7 @@ const getBedRequests = async (req, res, next) => {
   try {
     const requests = await BedRequest.find({ hospitalId: req.user.id })
       .populate('patientId', 'name email phone')
-      .sort({ createdAt: -1 })
+      .sort({ priority: -1, createdAt: -1 })
       .limit(50);
     res.json(requests);
   } catch (error) {
@@ -188,13 +192,122 @@ const getAmbulances = async (req, res, next) => {
 
 const updateSettings = async (req, res, next) => {
   try {
-    const { dailyOPCapacity } = req.body;
-    const hospital = await Hospital.findByIdAndUpdate(
-      req.user.id,
-      { dailyOPCapacity },
-      { new: true }
-    );
+    const { dailyOPCapacity, description, phone, address, city, specialties } = req.body;
+    const updates = {};
+    if (dailyOPCapacity != null) updates.dailyOPCapacity = dailyOPCapacity;
+    if (description != null) updates.description = description;
+    if (phone != null) updates.phone = phone;
+    if (address != null) updates.address = address;
+    if (city != null) updates.city = city;
+    if (specialties != null) updates.specialties = specialties;
+
+    const hospital = await Hospital.findByIdAndUpdate(req.user.id, updates, { new: true });
     res.json(hospital);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getProfile = async (req, res, next) => {
+  try {
+    const hospital = await Hospital.findById(req.user.id);
+    if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+    res.json(hospital);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const addMoreBeds = async (req, res, next) => {
+  try {
+    const { type, wardName, count } = req.body;
+    if (!type || !wardName || !count) {
+      return res.status(400).json({ message: 'type, wardName, and count are required' });
+    }
+    const hospital = await addBedsToHospital(req.user.id, type, wardName, Number(count));
+    const beds = await Bed.find({ hospitalId: req.user.id }).sort({ createdAt: -1 }).limit(Number(count));
+    res.status(201).json({ hospital, beds });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const data = req.body.data ? JSON.parse(req.body.data) : req.body;
+    const hospital = await Hospital.findById(req.user.id);
+    if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+
+    const fields = ['name', 'type', 'description', 'phone', 'address', 'city', 'dailyOPCapacity'];
+    fields.forEach((f) => {
+      if (data[f] != null) hospital[f] = data[f];
+    });
+    if (data.specialties) {
+      hospital.specialties = Array.isArray(data.specialties)
+        ? data.specialties
+        : data.specialties.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    const newImages = (req.files || []).map((f) => `/uploads/hospitals/${f.filename}`);
+    if (newImages.length) hospital.images = [...(hospital.images || []), ...newImages];
+
+    await hospital.save();
+    res.json(hospital);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resubmitForApproval = async (req, res, next) => {
+  try {
+    const hospital = await Hospital.findById(req.user.id);
+    if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+    if (hospital.approvalStatus !== 'rejected') {
+      return res.status(400).json({ message: 'Only rejected hospitals can resubmit' });
+    }
+    hospital.approvalStatus = 'pending';
+    await hospital.save();
+    res.json({ message: 'Profile resubmitted for Super-Admin approval', hospital });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createFleet = async (req, res, next) => {
+  try {
+    const { vehicleNumber, driverName, driverEmail, driverPassword, driverPhone } = req.body;
+    if (!vehicleNumber || !driverName || !driverEmail || !driverPassword) {
+      return res.status(400).json({ message: 'vehicleNumber, driverName, driverEmail, driverPassword required' });
+    }
+
+    const existing = await Driver.findOne({ email: driverEmail });
+    if (existing) return res.status(400).json({ message: 'Driver email already in use' });
+
+    const hospital = await Hospital.findById(req.user.id);
+    const passwordHash = await bcrypt.hash(driverPassword, 10);
+
+    const driver = await Driver.create({
+      hospitalId: hospital._id,
+      name: driverName,
+      email: driverEmail,
+      passwordHash,
+      phone: driverPhone || '',
+      status: 'offline',
+    });
+
+    const ambulance = await Ambulance.create({
+      hospitalId: hospital._id,
+      vehicleNumber,
+      driverName: driver.name,
+      driverId: driver._id,
+      status: 'offline',
+      location: hospital.location,
+    });
+
+    driver.ambulanceId = ambulance._id;
+    await driver.save();
+
+    res.status(201).json({ ambulance, driver });
   } catch (error) {
     next(error);
   }
@@ -210,4 +323,9 @@ module.exports = {
   rejectBedRequest,
   getAmbulances,
   updateSettings,
+  getProfile,
+  addMoreBeds,
+  updateProfile,
+  resubmitForApproval,
+  createFleet,
 };

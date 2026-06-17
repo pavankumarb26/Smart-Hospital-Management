@@ -74,6 +74,7 @@ const loginHospital = async (req, res, next) => {
         name: hospital.name,
         email: hospital.adminEmail,
         role: 'hospital',
+        approvalStatus: hospital.approvalStatus,
       },
     });
   } catch (error) {

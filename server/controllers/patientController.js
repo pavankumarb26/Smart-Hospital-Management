@@ -44,6 +44,13 @@ const bookOP = async (req, res, next) => {
 const createBedRequest = async (req, res, next) => {
   try {
     const { hospitalId, patientName, patientAge, problemDescription, bedType } = req.body;
+
+    const hospital = await Hospital.findOne({ _id: hospitalId, approvalStatus: 'approved' });
+    if (!hospital) return res.status(404).json({ message: 'Hospital not found or not approved' });
+
+    const isEmergency = ['icu', 'emergency', 'ventilator'].includes(bedType);
+    const priority = isEmergency ? 'emergency' : 'normal';
+
     const request = await BedRequest.create({
       patientId: req.user.id,
       hospitalId,
@@ -51,10 +58,35 @@ const createBedRequest = async (req, res, next) => {
       patientAge,
       problemDescription,
       bedType,
+      priority,
     });
 
     const io = req.app.get('io');
-    io.to(`hospital:${hospitalId}`).emit('bedRequest:new', request);
+    const payload = { ...request.toObject(), priority };
+
+    io.to(`hospital:${hospitalId}`).emit('bedRequest:new', payload);
+
+    if (isEmergency) {
+      io.to(`hospital:${hospitalId}`).emit('ambulance:priorityAlert', {
+        requestId: request._id,
+        patientName,
+        bedType,
+        message: `Emergency ${bedType} bed request — priority handling required`,
+      });
+
+      const drivers = await require('../models/Driver').find({
+        hospitalId,
+        status: 'available',
+      });
+      drivers.forEach((d) => {
+        io.to(`driver:${d._id}`).emit('ambulance:priorityAlert', {
+          requestId: request._id,
+          patientName,
+          bedType,
+          message: 'Emergency bed request at your hospital — standby for ambulance dispatch',
+        });
+      });
+    }
 
     res.status(201).json({ request });
   } catch (error) {

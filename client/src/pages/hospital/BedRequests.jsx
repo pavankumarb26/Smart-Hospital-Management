@@ -12,8 +12,9 @@ export default function BedRequests() {
 
   useEffect(() => {
     fetchRequests();
-    const unsub = subscribe('bedRequest:new', fetchRequests);
-    return unsub;
+    const unsub1 = subscribe('bedRequest:new', fetchRequests);
+    const unsub2 = subscribe('ambulance:priorityAlert', fetchRequests);
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   const approve = async (id) => {
@@ -40,13 +41,18 @@ export default function BedRequests() {
         ) : (
           <div className="space-y-4">
             {requests.map((r) => (
-              <div key={r._id} className="bg-white rounded-xl p-5 shadow-sm">
+              <div key={r._id} className={`bg-white rounded-xl p-5 shadow-sm ${r.priority === 'emergency' ? 'border-2 border-red-300' : ''}`}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h3 className="font-semibold">{r.patientName}</h3>
                     <p className="text-sm text-gray-500">Age {r.patientAge} &middot; {r.bedType} bed</p>
                   </div>
-                  <StatusBadge status={r.status} />
+                  <div className="flex flex-col items-end gap-1">
+                    {r.priority === 'emergency' && (
+                      <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">EMERGENCY</span>
+                    )}
+                    <StatusBadge status={r.status} />
+                  </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-3">{r.problemDescription}</p>
                 {r.status === 'pending' && (

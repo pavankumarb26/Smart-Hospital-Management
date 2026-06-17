@@ -69,11 +69,16 @@ export default function BedRequest() {
             className="w-full border rounded-lg px-4 py-2"
             value={form.bedType} onChange={(e) => setForm({ ...form, bedType: e.target.value })}
           >
-            <option value="normal">Normal Bed</option>
-            <option value="icu">ICU Bed</option>
-            <option value="emergency">Emergency Bed</option>
-            <option value="ventilator">Ventilator</option>
+            <option value="normal">Normal Bed — Request → Hospital Approval → Reserve</option>
+            <option value="icu">ICU Bed — Emergency (Hospital + Ambulance Alert)</option>
+            <option value="emergency">Emergency Bed — Priority Handling</option>
+            <option value="ventilator">Ventilator — Emergency (Hospital + Ambulance Alert)</option>
           </select>
+          {['icu', 'emergency', 'ventilator'].includes(form.bedType) && (
+            <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              Emergency request: hospital and ambulance fleet will be alerted immediately.
+            </p>
+          )}
           <button
             type="submit" disabled={loading}
             className="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 disabled:opacity-50"

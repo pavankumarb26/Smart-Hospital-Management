@@ -12,7 +12,7 @@ export default function Landing() {
           and request ambulances with live GPS tracking.
         </p>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Link
             to="/login/patient"
             className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-blue-100"
@@ -43,6 +43,17 @@ export default function Landing() {
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Driver Portal</h2>
             <p className="text-gray-500 text-sm">
               Accept rides, share GPS location, navigate to patients
+            </p>
+          </Link>
+
+          <Link
+            to="/login/admin"
+            className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-purple-100"
+          >
+            <div className="text-4xl mb-4">🛡️</div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Super-Admin</h2>
+            <p className="text-gray-500 text-sm">
+              Approve new hospital registrations
             </p>
           </Link>
         </div>

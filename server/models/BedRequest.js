@@ -7,6 +7,7 @@ const bedRequestSchema = new mongoose.Schema({
   patientAge: { type: Number, required: true },
   problemDescription: { type: String, required: true },
   bedType: { type: String, enum: ['normal', 'icu', 'emergency', 'ventilator'], required: true },
+  priority: { type: String, enum: ['normal', 'emergency'], default: 'normal' },
   status: { type: String, enum: ['pending', 'approved', 'rejected', 'expired'], default: 'pending' },
   assignedBedId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bed', default: null },
 }, { timestamps: true });

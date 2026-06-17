@@ -1,49 +1,91 @@
 const Hospital = require('../models/Hospital');
 const OPBooking = require('../models/OPBooking');
 const { getAvailableBedCounts } = require('../utils/bedHelpers');
+const { calculateDistance, parseHospitalCoords } = require('../utils/distance');
+
+const formatHospital = async (h, userLat, userLng) => {
+  const counts = await getAvailableBedCounts(h._id);
+  const { latitude, longitude } = parseHospitalCoords(h.location);
+
+  const distance = userLat && userLng && latitude != null
+    ? Math.round(calculateDistance(
+        parseFloat(userLat),
+        parseFloat(userLng),
+        latitude,
+        longitude
+      ) * 10) / 10
+    : null;
+
+  const debug = {
+    hospitalName: h.name,
+    city: h.city,
+    latitude,
+    longitude,
+    distance,
+    storedGeoJSON: h.location?.coordinates,
+  };
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[distance-debug]', debug);
+  }
+
+  return {
+    _id: h._id,
+    name: h.name,
+    type: h.type,
+    description: h.description,
+    specialties: h.specialties,
+    city: h.city,
+    images: h.images,
+    latitude,
+    longitude,
+    distance,
+    available: counts,
+    totalBeds: h.totalBeds,
+    totalICU: h.totalICU,
+    totalEmergency: h.totalEmergency,
+    totalVentilators: h.totalVentilators,
+  };
+};
 
 const getNearbyHospitals = async (req, res, next) => {
   try {
-    const { lat, lng } = req.query;
-    if (!lat || !lng) return res.status(400).json({ message: 'lat and lng required' });
+    const { lat, lng, city } = req.query;
+    const baseFilter = { approvalStatus: 'approved' };
 
-    const hospitals = await Hospital.find({
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-          $maxDistance: 50000,
+    if (city) {
+      baseFilter.city = new RegExp(city.trim(), 'i');
+    }
+
+    if (lat && lng) {
+      console.log('[distance-debug] patient coordinates:', {
+        userLatitude: parseFloat(lat),
+        userLongitude: parseFloat(lng),
+      });
+    }
+
+    let hospitals;
+
+    if (lat && lng) {
+      hospitals = await Hospital.find({
+        ...baseFilter,
+        location: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+          },
         },
-      },
-    });
+      });
+    } else {
+      hospitals = await Hospital.find(baseFilter);
+    }
 
     const results = await Promise.all(
-      hospitals.map(async (h) => {
-        const counts = await getAvailableBedCounts(h._id);
-        const coords = h.location.coordinates;
-        const dLat = (coords[1] - parseFloat(lat)) * Math.PI / 180;
-        const dLng = (coords[0] - parseFloat(lng)) * Math.PI / 180;
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos(parseFloat(lat) * Math.PI / 180) *
-          Math.cos(coords[1] * Math.PI / 180) *
-          Math.sin(dLng / 2) ** 2;
-        const distance = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return {
-          _id: h._id,
-          name: h.name,
-          type: h.type,
-          description: h.description,
-          specialties: h.specialties,
-          images: h.images,
-          distance: Math.round(distance * 10) / 10,
-          available: counts,
-          totalBeds: h.totalBeds,
-          totalICU: h.totalICU,
-          totalVentilators: h.totalVentilators,
-        };
-      })
+      hospitals.map((h) => formatHospital(h, lat, lng))
     );
+
+    if (lat && lng) {
+      results.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
 
     res.json(results);
   } catch (error) {
@@ -51,11 +93,24 @@ const getNearbyHospitals = async (req, res, next) => {
   }
 };
 
+const getCities = async (_req, res, next) => {
+  try {
+    const cities = await Hospital.distinct('city', { approvalStatus: 'approved' });
+    res.json(cities.sort());
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getHospitalById = async (req, res, next) => {
   try {
-    const hospital = await Hospital.findById(req.params.id);
+    const hospital = await Hospital.findOne({
+      _id: req.params.id,
+      approvalStatus: 'approved',
+    });
     if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
-    res.json(hospital);
+    const { latitude, longitude } = parseHospitalCoords(hospital.location);
+    res.json({ ...hospital.toObject(), latitude, longitude });
   } catch (error) {
     next(error);
   }
@@ -63,7 +118,10 @@ const getHospitalById = async (req, res, next) => {
 
 const getHospitalResources = async (req, res, next) => {
   try {
-    const hospital = await Hospital.findById(req.params.id);
+    const hospital = await Hospital.findOne({
+      _id: req.params.id,
+      approvalStatus: 'approved',
+    });
     if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
     const available = await getAvailableBedCounts(hospital._id);
@@ -83,7 +141,10 @@ const getHospitalResources = async (req, res, next) => {
 
 const getOPStatus = async (req, res, next) => {
   try {
-    const hospital = await Hospital.findById(req.params.id);
+    const hospital = await Hospital.findOne({
+      _id: req.params.id,
+      approvalStatus: 'approved',
+    });
     if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
     const date = req.query.date ? new Date(req.query.date) : new Date();
@@ -110,6 +171,7 @@ const getOPStatus = async (req, res, next) => {
 
 module.exports = {
   getNearbyHospitals,
+  getCities,
   getHospitalById,
   getHospitalResources,
   getOPStatus,

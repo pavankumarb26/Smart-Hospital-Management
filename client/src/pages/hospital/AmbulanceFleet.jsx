@@ -8,6 +8,11 @@ import api from '../../services/api';
 export default function AmbulanceFleet() {
   const [ambulances, setAmbulances] = useState([]);
   const [markers, setMarkers] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    vehicleNumber: '', driverName: '', driverEmail: '', driverPassword: '', driverPhone: '',
+  });
+  const [error, setError] = useState('');
   const { subscribe } = useSocketContext();
 
   const fetchAmbulances = () => {
@@ -27,22 +32,53 @@ export default function AmbulanceFleet() {
 
   useEffect(() => {
     fetchAmbulances();
-    const unsub1 = subscribe('ambulance:locationUpdate', (data) => {
-      setMarkers((prev) => {
-        const updated = prev.filter((m) => m.title !== data.ambulanceId);
-        return [...updated, { lat: data.lat, lng: data.lng, title: String(data.ambulanceId) }];
-      });
-      fetchAmbulances();
-    });
+    const unsub1 = subscribe('ambulance:locationUpdate', () => fetchAmbulances());
     const unsub2 = subscribe('ambulance:statusChanged', fetchAmbulances);
     return () => { unsub1(); unsub2(); };
   }, []);
+
+  const addFleet = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.post('/hospital/fleet', form);
+      setForm({ vehicleNumber: '', driverName: '', driverEmail: '', driverPassword: '', driverPhone: '' });
+      setShowForm(false);
+      fetchAmbulances();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to add fleet');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar portal="hospital" />
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Ambulance Fleet</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Ambulance Fleet</h1>
+          <button onClick={() => setShowForm(!showForm)}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700">
+            + Add Ambulance & Driver
+          </button>
+        </div>
+
+        {showForm && (
+          <form onSubmit={addFleet} className="bg-white p-4 rounded-xl shadow-sm mb-6 grid md:grid-cols-2 gap-3">
+            <input required placeholder="Vehicle Number" className="border rounded-lg px-3 py-2"
+              value={form.vehicleNumber} onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value })} />
+            <input required placeholder="Driver Name" className="border rounded-lg px-3 py-2"
+              value={form.driverName} onChange={(e) => setForm({ ...form, driverName: e.target.value })} />
+            <input required type="email" placeholder="Driver Email (login)" className="border rounded-lg px-3 py-2"
+              value={form.driverEmail} onChange={(e) => setForm({ ...form, driverEmail: e.target.value })} />
+            <input required placeholder="Driver Password" className="border rounded-lg px-3 py-2"
+              value={form.driverPassword} onChange={(e) => setForm({ ...form, driverPassword: e.target.value })} />
+            <input placeholder="Driver Phone" className="border rounded-lg px-3 py-2 md:col-span-2"
+              value={form.driverPhone} onChange={(e) => setForm({ ...form, driverPhone: e.target.value })} />
+            <button type="submit" className="md:col-span-2 bg-orange-600 text-white py-2 rounded-lg">Add Fleet</button>
+            {error && <p className="md:col-span-2 text-red-600 text-sm">{error}</p>}
+          </form>
+        )}
+
         <MapView markers={markers} className="h-64 w-full rounded-xl mb-6" />
         <div className="grid gap-3">
           {ambulances.map((a) => (

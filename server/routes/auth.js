@@ -1,11 +1,13 @@
 const express = require('express');
 const { body } = require('express-validator');
+const upload = require('../config/upload');
 const {
   registerPatient,
   loginPatient,
   loginHospital,
   loginDriver,
 } = require('../controllers/authController');
+const { registerHospital } = require('../controllers/adminController');
 
 const router = express.Router();
 
@@ -21,6 +23,7 @@ router.post(
 );
 
 router.post('/patient/login', loginPatient);
+router.post('/hospital/register', upload.array('images', 5), registerHospital);
 router.post('/hospital/login', loginHospital);
 router.post('/driver/login', loginDriver);
 

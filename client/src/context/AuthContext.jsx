@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { connectSocket, disconnectSocket } from '../services/socketService';
 
 const AuthContext = createContext(null);
@@ -38,7 +38,13 @@ export function AuthProvider({ children }) {
   }, [state.token]);
 
   const login = (token, user) => dispatch({ type: 'LOGIN', payload: { token, user } });
-  const logout = () => dispatch({ type: 'LOGOUT' });
+  const logout = useCallback(() => dispatch({ type: 'LOGOUT' }), []);
+
+  useEffect(() => {
+    const onUnauthorized = () => logout();
+    window.addEventListener('auth:logout', onUnauthorized);
+    return () => window.removeEventListener('auth:logout', onUnauthorized);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout, dispatch }}>

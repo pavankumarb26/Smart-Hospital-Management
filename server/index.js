@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -13,6 +14,7 @@ const hospitalRoutes = require('./routes/hospitals');
 const patientRoutes = require('./routes/patient');
 const hospitalAdminRoutes = require('./routes/hospitalAdmin');
 const driverRoutes = require('./routes/driver');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,14 +34,16 @@ connectDB();
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/hospitals', hospitalRoutes);
-app.use('/api', patientRoutes);
 app.use('/api/hospital', hospitalAdminRoutes);
 app.use('/api/driver', driverRoutes);
+app.use('/api', patientRoutes);
 
 app.use(errorHandler);
 
