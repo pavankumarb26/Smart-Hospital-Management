@@ -4,6 +4,8 @@ const Bed = require('../models/Bed');
 const BedRequest = require('../models/BedRequest');
 const OPBooking = require('../models/OPBooking');
 const Ambulance = require('../models/Ambulance');
+const AmbulanceRequest = require('../models/AmbulanceRequest');
+const Driver = require('../models/Driver');
 const { getBedStats } = require('../utils/bedHelpers');
 const { generateBedQR } = require('../utils/qrGenerator');
 const { addBedsToHospital } = require('../utils/bedFactory');
@@ -78,6 +80,11 @@ const createBed = async (req, res, next) => {
 const updateBedStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
+    const allowed = ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ message: 'Invalid bed status' });
+    }
+
     const bed = await Bed.findById(req.params.id);
     if (!bed) return res.status(404).json({ message: 'Bed not found' });
 
@@ -98,8 +105,33 @@ const updateBedStatus = async (req, res, next) => {
       newStatus: status,
     });
 
+    console.log('[qr-scan] bed status updated:', bed.bedNumber, '→', status);
     res.json(bed);
   } catch (error) {
+    next(error);
+  }
+};
+
+const scanBed = async (req, res, next) => {
+  try {
+    const { bedId, hospitalId: qrHospitalId } = req.body;
+    if (!bedId) return res.status(400).json({ message: 'bedId is required in QR payload' });
+
+    if (qrHospitalId && qrHospitalId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'This QR code belongs to another hospital' });
+    }
+
+    const bed = await Bed.findOne({ _id: bedId, hospitalId: req.user.id });
+    if (!bed) {
+      return res.status(404).json({ message: 'Bed not found. QR may be invalid or from another hospital.' });
+    }
+
+    console.log('[qr-scan] lookup success:', { bedId: bed._id, bedNumber: bed.bedNumber, ward: bed.wardName });
+    res.json(bed);
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid bed ID format in QR code' });
+    }
     next(error);
   }
 };
@@ -313,11 +345,45 @@ const createFleet = async (req, res, next) => {
   }
 };
 
+const deleteHospital = async (req, res, next) => {
+  try {
+    const { confirmText } = req.body;
+    if (confirmText !== 'DELETE') {
+      return res.status(400).json({ message: 'Type DELETE to confirm hospital deletion' });
+    }
+
+    const hospitalId = req.user.id;
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+
+    if (hospital._id.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to delete this hospital' });
+    }
+
+    await Promise.all([
+      BedRequest.deleteMany({ hospitalId }),
+      OPBooking.deleteMany({ hospitalId }),
+      AmbulanceRequest.deleteMany({ hospitalId }),
+      Bed.deleteMany({ hospitalId }),
+      Driver.deleteMany({ hospitalId }),
+      Ambulance.deleteMany({ hospitalId }),
+    ]);
+
+    await Hospital.findByIdAndDelete(hospitalId);
+
+    console.log('[hospital-delete] deleted hospital:', hospital.name, hospitalId);
+    res.json({ message: 'Hospital and all related data deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboard,
   getBeds,
   createBed,
   updateBedStatus,
+  scanBed,
   getBedRequests,
   approveBedRequest,
   rejectBedRequest,
@@ -328,4 +394,5 @@ module.exports = {
   updateProfile,
   resubmitForApproval,
   createFleet,
+  deleteHospital,
 };

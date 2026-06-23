@@ -1,20 +1,22 @@
 const Hospital = require('../models/Hospital');
 const OPBooking = require('../models/OPBooking');
 const { getAvailableBedCounts } = require('../utils/bedHelpers');
-const { calculateDistance, parseHospitalCoords } = require('../utils/distance');
+const { calculateDistance, parseHospitalCoords, formatDistanceKm } = require('../utils/distance');
 
 const formatHospital = async (h, userLat, userLng) => {
   const counts = await getAvailableBedCounts(h._id);
   const { latitude, longitude } = parseHospitalCoords(h.location);
 
-  const distance = userLat && userLng && latitude != null
-    ? Math.round(calculateDistance(
+  const rawDistance = userLat && userLng && latitude != null
+    ? calculateDistance(
         parseFloat(userLat),
         parseFloat(userLng),
         latitude,
         longitude
-      ) * 10) / 10
+      )
     : null;
+
+  const distance = formatDistanceKm(rawDistance);
 
   const debug = {
     hospitalName: h.name,

@@ -26,4 +26,10 @@ const parseHospitalCoords = (location) => {
 const isBangaloreCoords = (latitude, longitude) =>
   latitude > 12 && latitude < 13.5 && longitude > 77 && longitude < 78;
 
-module.exports = { calculateDistance, parseHospitalCoords, isBangaloreCoords };
+/** Format km with one decimal — avoids integer rounding hiding sub-km distances in display */
+const formatDistanceKm = (km) => {
+  if (km == null || Number.isNaN(km)) return null;
+  return parseFloat(Number(km).toFixed(1));
+};
+
+module.exports = { calculateDistance, parseHospitalCoords, isBangaloreCoords, formatDistanceKm };

@@ -68,6 +68,7 @@ npm run dev     # Starts on http://localhost:5173
 |------|-------|----------|
 | Patient | patient@test.com | password123 |
 | Hospital | hospital@test.com | password123 |
+|super-admin | admin@smartcare.com | password123
 | Driver | driver@test.com | password123 |
 
 ## Project Structure

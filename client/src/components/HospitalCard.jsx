@@ -19,7 +19,8 @@ export default function HospitalCard({ hospital }) {
       <p className="text-sm text-gray-500 mb-1 capitalize">{hospital.type} Hospital · {hospital.city}</p>
       {hospital.distance != null && (
         <p className="text-sm text-blue-600 font-medium mb-3">
-          {hospital.distance} km away <span className="text-gray-400 font-normal">(straight-line)</span>
+          {Number(hospital.distance).toFixed(1)} km away{' '}
+          <span className="text-gray-400 font-normal">(straight-line)</span>
         </p>
       )}
       <div className="grid grid-cols-3 gap-2 text-center text-sm">

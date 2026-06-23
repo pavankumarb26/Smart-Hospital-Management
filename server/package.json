@@ -8,7 +8,8 @@
     "dev": "nodemon index.js",
     "seed": "node seed.js",
     "audit:locations": "node scripts/audit-hospital-locations.js",
-    "migrate:locations": "node scripts/migrate-fix-hospital-locations.js"
+    "migrate:locations": "node scripts/migrate-fix-hospital-locations.js",
+    "fix:ragolu": "node scripts/fix-ragolu-coordinates.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

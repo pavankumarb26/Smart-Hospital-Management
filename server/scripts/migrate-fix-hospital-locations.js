@@ -9,16 +9,16 @@ const { isBangaloreCoords } = require('../utils/distance');
  */
 require('dotenv').config();
 
-const RAGOLU_AREA = {
-  lng: 83.9086,
-  lat: 18.4059,
-  label: 'Ragolu / Srikakulam area (default)',
-};
-
 const CITY_COORDS = {
-  ragolu: { lng: 83.9086, lat: 18.4059 },
+  ragolu: { lng: 83.8450, lat: 18.3150 },
   amadalavalasa: { lng: 83.9028, lat: 18.4108 },
   srikakulam: { lng: 83.8965, lat: 18.2949 },
+};
+
+const RAGOLU_AREA = {
+  lng: 83.8450,
+  lat: 18.3150,
+  label: 'Ragolu village area',
 };
 
 const resolveCoords = (hospital) => {
