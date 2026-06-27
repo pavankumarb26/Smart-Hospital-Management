@@ -347,6 +347,9 @@ const createFleet = async (req, res, next) => {
 
 const deleteHospital = async (req, res, next) => {
   try {
+    console.log("User:", req.user);
+    console.log("Role:", req.user?.role);
+
     const { confirmText } = req.body;
     if (confirmText !== 'DELETE') {
       return res.status(400).json({ message: 'Type DELETE to confirm hospital deletion' });
@@ -355,10 +358,6 @@ const deleteHospital = async (req, res, next) => {
     const hospitalId = req.user.id;
     const hospital = await Hospital.findById(hospitalId);
     if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
-
-    if (hospital._id.toString() !== req.user.id.toString()) {
-      return res.status(403).json({ message: 'Not authorized to delete this hospital' });
-    }
 
     await Promise.all([
       BedRequest.deleteMany({ hospitalId }),
