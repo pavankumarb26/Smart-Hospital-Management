@@ -19,9 +19,15 @@ const adminRoutes = require('./routes/admin');
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:3000'
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PATCH'],
   },
 });
@@ -32,7 +38,7 @@ startReservationExpiryJob(io);
 
 connectDB();
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -45,7 +51,24 @@ app.use('/api/hospital', hospitalAdminRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api', patientRoutes);
 
+// Serve static assets from the React client build in production
+const clientBuildPath = path.join(__dirname, '../client/dist');
+app.use(express.static(clientBuildPath));
+
+// React Router SPA fallback for all other routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(clientBuildPath, 'index.html'), (err) => {
+    if (err) {
+      res.status(404).send('Static client assets not built. Please run "npm run build" in the client directory.');
+    }
+  });
+});
+
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

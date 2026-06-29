@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
-      '/api': 'http://localhost:5000',
+      '/api': 'https://smart-hospital-management-1.onrender.com',
     },
   },
 })
