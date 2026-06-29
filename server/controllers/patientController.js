@@ -139,6 +139,8 @@ const getAvailableAmbulances = async (req, res, next) => {
         driverId: a.driverId,
         hospitalId: a.hospitalId,
         distance: Math.round(distance * 10) / 10,
+        latitude: coords[1],
+        longitude: coords[0],
       };
     });
 

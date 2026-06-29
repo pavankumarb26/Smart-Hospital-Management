@@ -12,6 +12,8 @@ const hospitalSchema = new mongoose.Schema({
     type: { type: String, default: 'Point' },
     coordinates: { type: [Number], required: true },
   },
+  googlePlaceId: { type: String, sparse: true },
+  website: { type: String, default: '' },
   images: [{ type: String }],
   adminEmail: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
@@ -31,5 +33,7 @@ const hospitalSchema = new mongoose.Schema({
 hospitalSchema.index({ location: '2dsphere' });
 hospitalSchema.index({ city: 1 });
 hospitalSchema.index({ approvalStatus: 1 });
+hospitalSchema.index({ googlePlaceId: 1 }, { sparse: true });
+hospitalSchema.index({ name: 'text' });
 
 module.exports = mongoose.model('Hospital', hospitalSchema);

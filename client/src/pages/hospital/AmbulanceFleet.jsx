@@ -8,6 +8,7 @@ import api from '../../services/api';
 export default function AmbulanceFleet() {
   const [ambulances, setAmbulances] = useState([]);
   const [markers, setMarkers] = useState([]);
+  const [hospitalLocation, setHospitalLocation] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     vehicleNumber: '', driverName: '', driverEmail: '', driverPassword: '', driverPhone: '',
@@ -15,27 +16,46 @@ export default function AmbulanceFleet() {
   const [error, setError] = useState('');
   const { subscribe } = useSocketContext();
 
-  const fetchAmbulances = () => {
+  const fetchAmbulances = (hospitalLoc) => {
     api.get('/hospital/ambulances').then((r) => {
       setAmbulances(r.data);
-      setMarkers(
-        r.data
-          .filter((a) => a.location?.coordinates?.[0])
-          .map((a) => ({
-            lat: a.location.coordinates[1],
-            lng: a.location.coordinates[0],
-            title: a.vehicleNumber,
-          }))
-      );
+      const ambMarkers = r.data
+        .filter((a) => a.location?.coordinates?.[0])
+        .map((a) => ({
+          lat: a.location.coordinates[1],
+          lng: a.location.coordinates[0],
+          title: `🚚 ${a.vehicleNumber} [${a.status.toUpperCase()}] - Driver: ${a.driverName}`,
+        }));
+
+      if (hospitalLoc) {
+        setMarkers([
+          { lat: hospitalLoc.lat, lng: hospitalLoc.lng, title: '🏥 Our Hospital Location' },
+          ...ambMarkers
+        ]);
+      } else {
+        setMarkers(ambMarkers);
+      }
     });
   };
 
   useEffect(() => {
-    fetchAmbulances();
-    const unsub1 = subscribe('ambulance:locationUpdate', () => fetchAmbulances());
-    const unsub2 = subscribe('ambulance:statusChanged', fetchAmbulances);
+    api.get('/hospital/profile').then((r) => {
+      if (r.data?.location?.coordinates) {
+        const loc = {
+          lat: r.data.location.coordinates[1],
+          lng: r.data.location.coordinates[0]
+        };
+        setHospitalLocation(loc);
+        fetchAmbulances(loc);
+      } else {
+        fetchAmbulances(null);
+      }
+    });
+
+    const unsub1 = subscribe('ambulance:locationUpdate', () => fetchAmbulances(hospitalLocation));
+    const unsub2 = subscribe('ambulance:statusChanged', () => fetchAmbulances(hospitalLocation));
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [hospitalLocation]);
 
   const addFleet = async (e) => {
     e.preventDefault();
@@ -79,7 +99,7 @@ export default function AmbulanceFleet() {
           </form>
         )}
 
-        <MapView markers={markers} className="h-64 w-full rounded-xl mb-6" />
+        <MapView center={hospitalLocation} markers={markers} className="h-64 w-full rounded-xl mb-6 shadow-xs border border-gray-200" />
         <div className="grid gap-3">
           {ambulances.map((a) => (
             <div key={a._id} className="bg-white rounded-xl p-4 shadow-sm flex justify-between items-center">

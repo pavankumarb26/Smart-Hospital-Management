@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Navbar from '../../components/Navbar';
 import StatusBadge from '../../components/StatusBadge';
+import MapView from '../../components/MapView';
 import { useAuth } from '../../context/AuthContext';
 import { useSocketContext } from '../../context/SocketContext';
 import { useGeolocation } from '../../hooks/useGeolocation';
@@ -91,46 +92,76 @@ export default function DriverHome() {
     setStatus('available');
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar portal="driver" />
-      <div className="max-w-md mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-2">Driver Portal</h1>
-        {profile && (
-          <p className="text-gray-500 mb-6">
-            {profile.name} &middot; {profile.ambulanceId?.vehicleNumber}
-          </p>
-        )}
+  const markers = [];
+  if (location) {
+    markers.push({ lat: location.lat, lng: location.lng, title: 'You (Driver)' });
+  }
 
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-          <p className="text-sm text-gray-500 mb-3">Your Status</p>
+  if (activeRide) {
+    if (activeRide.status === 'accepted' && activeRide.patientLocation?.coordinates) {
+      const [pLng, pLat] = activeRide.patientLocation.coordinates;
+      markers.push({ lat: pLat, lng: pLng, title: 'Patient Pickup Point' });
+    } else if (activeRide.status === 'in_progress' && activeRide.hospitalId?.location?.coordinates) {
+      const [hLng, hLat] = activeRide.hospitalId.location.coordinates;
+      markers.push({ lat: hLat, lng: hLng, title: activeRide.hospitalId.name || 'Destination Hospital' });
+    }
+  } else if (rideRequest && rideRequest.patientLocation) {
+    markers.push({ lat: rideRequest.patientLocation.lat, lng: rideRequest.patientLocation.lng, title: 'Patient Emergency Request' });
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Navbar portal="driver" />
+      <div className="max-w-md mx-auto px-4 py-8 w-full space-y-6">
+        <div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Driver Portal</h1>
+          {profile && (
+            <p className="text-gray-500 mt-1">
+              {profile.name} &middot; <span className="font-mono bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs font-semibold">{profile.ambulanceId?.vehicleNumber}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Map View showing driver position and patient route */}
+        <div className="bg-white rounded-2xl p-2 shadow-xs border border-gray-100 overflow-hidden">
+          <MapView
+            center={location}
+            markers={markers}
+            className="h-64 w-full rounded-xl"
+          />
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Your Status</p>
           <div className="flex gap-2">
             {['available', 'busy', 'offline'].map((s) => (
               <button
                 key={s}
                 onClick={() => changeStatus(s)}
-                className={`flex-1 py-2 rounded-lg text-sm capitalize ${
-                  status === s ? 'bg-orange-600 text-white' : 'bg-gray-100 hover:bg-gray-200'
+                className={`flex-1 py-2 rounded-xl text-xs font-bold capitalize transition-all ${
+                  status === s ? 'bg-orange-600 text-white shadow-xs' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
                 }`}
               >
                 {s}
               </button>
             ))}
           </div>
-          <div className="mt-3 text-center">
+          <div className="mt-4 text-center">
             <StatusBadge status={status} />
           </div>
         </div>
 
         {rideRequest && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 mb-6">
-            <h2 className="font-semibold text-lg mb-2">New Ride Request!</h2>
-            <p className="text-sm text-gray-600 mb-4">A patient needs an ambulance nearby</p>
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 space-y-4">
+            <div>
+              <h2 className="font-extrabold text-orange-900 text-lg">New Emergency Request!</h2>
+              <p className="text-xs text-orange-700 mt-0.5">A patient needs urgent transport. Standby coordinates locked.</p>
+            </div>
             <div className="flex gap-2">
-              <button onClick={acceptRide} className="flex-1 bg-green-600 text-white py-2 rounded-lg">
-                Accept
+              <button onClick={acceptRide} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-xs">
+                Accept Ride
               </button>
-              <button onClick={rejectRide} className="flex-1 bg-red-600 text-white py-2 rounded-lg">
+              <button onClick={rejectRide} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-xs">
                 Reject
               </button>
             </div>
@@ -138,20 +169,35 @@ export default function DriverHome() {
         )}
 
         {activeRide && (
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-semibold">Active Ride</h2>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h2 className="font-bold text-gray-800">Active Emergency Ride</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Assigned to vehicle {profile?.ambulanceId?.vehicleNumber}</p>
+              </div>
               <StatusBadge status={activeRide.status} />
             </div>
+
             {activeRide.status === 'accepted' && (
-              <button onClick={markPickup} className="w-full bg-blue-600 text-white py-2 rounded-lg mb-2">
-                Patient Picked Up
-              </button>
+              <div className="space-y-2">
+                <p className="text-xs text-blue-700 bg-blue-50 p-3 rounded-lg text-center font-medium">
+                  Please drive to the patient pickup location shown on the map.
+                </p>
+                <button onClick={markPickup} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-xs">
+                  Mark Patient Picked Up
+                </button>
+              </div>
             )}
+
             {activeRide.status === 'in_progress' && (
-              <button onClick={markComplete} className="w-full bg-green-600 text-white py-2 rounded-lg">
-                Mark Complete
-              </button>
+              <div className="space-y-2">
+                <p className="text-xs text-purple-700 bg-purple-50 p-3 rounded-lg text-center font-medium">
+                  Patient on board. Navigate to hospital destination shown on the map.
+                </p>
+                <button onClick={markComplete} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-xs">
+                  Mark Transport Complete
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -159,3 +205,4 @@ export default function DriverHome() {
     </div>
   );
 }
+

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
 import StatusBadge from '../../components/StatusBadge';
+import MapView from '../../components/MapView';
 import { imageUrl } from '../../utils/imageUrl';
 import api from '../../services/api';
 
@@ -58,6 +59,25 @@ export default function HospitalDetail() {
             {hospital.specialties.map((s) => (
               <span key={s} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">{s}</span>
             ))}
+          </div>
+        )}
+
+        {hospital.latitude && hospital.longitude && (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-6 border border-gray-100">
+            <h2 className="font-semibold text-gray-900 mb-3">Location & Directions</h2>
+            <MapView
+              center={{ lat: hospital.latitude, lng: hospital.longitude }}
+              markers={[{ lat: hospital.latitude, lng: hospital.longitude, title: hospital.name }]}
+              className="h-64 w-full rounded-xl mb-3"
+            />
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${hospital.latitude},${hospital.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
+            >
+              📍 Navigate in Google Maps &rarr;
+            </a>
           </div>
         )}
 

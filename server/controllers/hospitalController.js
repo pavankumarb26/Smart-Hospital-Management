@@ -141,6 +141,67 @@ const getHospitalResources = async (req, res, next) => {
   }
 };
 
+const searchHospitalsByName = async (req, res, next) => {
+  try {
+    const { name, lat, lng, includeAll } = req.query;
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ message: 'Name must be at least 2 characters' });
+    }
+
+    // For registration flow, include all hospitals (even pending/rejected)
+    // For patient search, only approved hospitals
+    const baseFilter = includeAll === 'true'
+      ? { name: new RegExp(name.trim(), 'i') }
+      : { approvalStatus: 'approved', name: new RegExp(name.trim(), 'i') };
+
+    let hospitals;
+    if (lat && lng) {
+      hospitals = await Hospital.find({
+        ...baseFilter,
+        location: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+            $maxDistance: 50000,
+          },
+        },
+      }).limit(20);
+    } else {
+      hospitals = await Hospital.find(baseFilter).limit(20);
+    }
+
+    const results = hospitals.map((h) => {
+      const { latitude, longitude } = parseHospitalCoords(h.location);
+      const rawDistance = lat && lng && latitude != null
+        ? calculateDistance(parseFloat(lat), parseFloat(lng), latitude, longitude)
+        : null;
+
+      return {
+        _id: h._id,
+        name: h.name,
+        type: h.type,
+        description: h.description,
+        specialties: h.specialties,
+        city: h.city,
+        address: h.address,
+        phone: h.phone,
+        images: h.images,
+        latitude,
+        longitude,
+        distance: formatDistanceKm(rawDistance),
+        approvalStatus: h.approvalStatus,
+      };
+    });
+
+    if (lat && lng) {
+      results.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+
+    res.json(results);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getOPStatus = async (req, res, next) => {
   try {
     const hospital = await Hospital.findOne({
@@ -177,4 +238,5 @@ module.exports = {
   getHospitalById,
   getHospitalResources,
   getOPStatus,
+  searchHospitalsByName,
 };

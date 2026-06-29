@@ -82,15 +82,16 @@ const registerHospital = async (req, res, next) => {
     const {
       name, type, description, specialties, city, address, phone,
       adminEmail, password, lat, lng, dailyOPCapacity, bedConfig, ambulance,
+      website,
     } = data;
 
     if (!name || !type || !city || !adminEmail || !password || !lat || !lng) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    const existing = await Hospital.findOne({ adminEmail });
-    if (existing) {
-      if (existing.approvalStatus === 'rejected') {
+    const existingByEmail = await Hospital.findOne({ adminEmail });
+    if (existingByEmail) {
+      if (existingByEmail.approvalStatus === 'rejected') {
         return res.status(400).json({
           message: 'This email was rejected. Please login and resubmit your profile from Settings.',
         });
@@ -112,6 +113,7 @@ const registerHospital = async (req, res, next) => {
       address: address || '',
       phone: phone || '',
       location: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+      website: website || '',
       images: imagePaths,
       adminEmail,
       passwordHash,
