@@ -12,6 +12,23 @@ const getProfile = async (req, res, next) => {
   }
 };
 
+const getActiveRide = async (req, res, next) => {
+  try {
+    const request = await AmbulanceRequest.findOne({
+      driverId: req.user.id,
+      status: { $in: ['requested', 'accepted', 'in_progress'] },
+    })
+      .sort({ createdAt: -1 })
+      .populate('patientId', 'name phone')
+      .populate('hospitalId', 'name location')
+      .populate('ambulanceId', 'vehicleNumber location');
+
+    res.json(request);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
@@ -51,11 +68,17 @@ const acceptRequest = async (req, res, next) => {
     request.status = 'accepted';
     await request.save();
 
+    const populated = await AmbulanceRequest.findById(request._id)
+      .populate('patientId', 'name phone')
+      .populate('hospitalId', 'name location')
+      .populate('ambulanceId', 'vehicleNumber location');
+
     const io = req.app.get('io');
     io.to(`patient:${request.patientId}`).emit('ambulance:accepted', {
       requestId: request._id,
       driverId: driver._id,
       ambulanceId: driver.ambulanceId,
+      status: 'accepted',
     });
     io.to(`hospital:${driver.hospitalId}`).emit('ambulance:statusChanged', {
       driverId: driver._id,
@@ -63,7 +86,7 @@ const acceptRequest = async (req, res, next) => {
       status: 'busy',
     });
 
-    res.json(request);
+    res.json(populated);
   } catch (error) {
     next(error);
   }
@@ -75,8 +98,22 @@ const rejectRequest = async (req, res, next) => {
     if (!request) return res.status(404).json({ message: 'Request not found' });
 
     request.status = 'rejected';
-    request.driverId = null;
     await request.save();
+
+    const driver = await Driver.findByIdAndUpdate(
+      req.user.id,
+      { status: 'available' },
+      { new: true }
+    );
+    if (driver?.ambulanceId) {
+      await Ambulance.findByIdAndUpdate(driver.ambulanceId, { status: 'available' });
+    }
+
+    const io = req.app.get('io');
+    io.to(`patient:${request.patientId}`).emit('ambulance:rejected', {
+      requestId: request._id,
+      message: 'Driver was unable to accept your request. Please select another ambulance.',
+    });
 
     res.json({ message: 'Request rejected' });
   } catch (error) {
@@ -90,7 +127,18 @@ const markPickup = async (req, res, next) => {
       req.params.id,
       { status: 'in_progress' },
       { new: true }
-    ).populate('hospitalId', 'name location');
+    )
+      .populate('patientId', 'name phone')
+      .populate('hospitalId', 'name location')
+      .populate('ambulanceId', 'vehicleNumber location');
+
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+
+    const io = req.app.get('io');
+    io.to(`patient:${request.patientId._id || request.patientId}`).emit('ambulance:pickup', {
+      requestId: request._id,
+      status: 'in_progress',
+    });
 
     res.json(request);
   } catch (error) {
@@ -111,9 +159,15 @@ const markComplete = async (req, res, next) => {
       { status: 'available' },
       { new: true }
     );
-    await Ambulance.findByIdAndUpdate(driver.ambulanceId, { status: 'available' });
+    if (driver?.ambulanceId) {
+      await Ambulance.findByIdAndUpdate(driver.ambulanceId, { status: 'available' });
+    }
 
     const io = req.app.get('io');
+    io.to(`patient:${request.patientId}`).emit('ambulance:completed', {
+      requestId: request._id,
+      status: 'completed',
+    });
     io.to(`hospital:${driver.hospitalId}`).emit('ambulance:statusChanged', {
       driverId: driver._id,
       ambulanceId: driver.ambulanceId,
@@ -128,6 +182,7 @@ const markComplete = async (req, res, next) => {
 
 module.exports = {
   getProfile,
+  getActiveRide,
   updateStatus,
   acceptRequest,
   rejectRequest,

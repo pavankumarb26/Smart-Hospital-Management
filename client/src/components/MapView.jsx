@@ -43,6 +43,19 @@ export default function MapView({
     }
   }, [key]);
 
+  // Leaflet cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+      if (mapRef.current) {
+        mapRef.current._leaflet_id = null;
+      }
+    };
+  }, []);
+
   // Leaflet Map Initialization and updates
   useEffect(() => {
     if (key || !leafletLoaded || !mapRef.current) return;
@@ -51,6 +64,9 @@ export default function MapView({
     const latLng = center || { lat: 12.9716, lng: 77.5946 };
 
     if (!leafletMapRef.current) {
+      if (mapRef.current._leaflet_id) {
+        mapRef.current._leaflet_id = null;
+      }
       leafletMapRef.current = L.map(mapRef.current, {
         zoomControl: true,
         attributionControl: false,
@@ -79,27 +95,48 @@ export default function MapView({
       const isDraggable = draggableMarker && index === 0;
       const isSelected = index === selectedMarkerIndex;
 
+      const titleLower = (m.title || '').toLowerCase();
+      const isAmbulance = m.type === 'ambulance' || titleLower.includes('ambulance') || titleLower.includes('truck');
+      const isPatient = m.type === 'patient' || titleLower.includes('patient') || titleLower.includes('you');
+      const isHospital = m.type === 'hospital' || titleLower.includes('hospital');
+
+      let bgColor = '#3b82f6';
+      let iconSymbol = isSelected ? '✓' : (index + 1);
+
+      if (isAmbulance) {
+        bgColor = '#ea580c'; // Vibrant orange
+        iconSymbol = '🚑';
+      } else if (isPatient) {
+        bgColor = '#2563eb'; // Blue
+        iconSymbol = '👤';
+      } else if (isHospital) {
+        bgColor = '#dc2626'; // Red
+        iconSymbol = '🏥';
+      } else if (isSelected) {
+        bgColor = '#22c55e'; // Green
+      }
+
       const markerIcon = L.divIcon({
         className: '',
         html: `<div style="
-          background: ${isSelected ? '#22c55e' : m.icon?.url ? 'transparent' : '#3b82f6'};
-          width: ${isSelected ? '40px' : '32px'};
-          height: ${isSelected ? '40px' : '32px'};
+          background: ${m.icon?.url ? 'transparent' : bgColor};
+          width: 36px;
+          height: 36px;
           border-radius: 50% 50% 50% 0;
           transform: rotate(-45deg);
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          border: 2px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
           display: flex;
           align-items: center;
           justify-content: center;
         ">
           ${m.icon?.url
-            ? `<img src="${m.icon.url}" style="width:20px;height:20px;transform:rotate(45deg);border-radius:50%;" />`
-            : `<span style="transform:rotate(45deg);color:white;font-size:12px;font-weight:bold;">${isSelected ? '✓' : (index + 1)}</span>`
+            ? `<img src="${m.icon.url}" style="width:22px;height:22px;transform:rotate(45deg);border-radius:50%;" />`
+            : `<span style="transform:rotate(45deg);color:white;font-size:14px;font-weight:bold;line-height:1;">${iconSymbol}</span>`
           }
         </div>`,
-        iconSize: [isSelected ? 40 : 32, isSelected ? 40 : 32],
-        iconAnchor: [isSelected ? 20 : 16, isSelected ? 40 : 32],
+        iconSize: [36, 36],
+        iconAnchor: [18, 36],
       });
 
       const marker = L.marker([m.lat, m.lng], {
@@ -111,7 +148,7 @@ export default function MapView({
         marker.bindPopup(`<b>${m.title}</b>`);
       }
 
-      if (isSelected) {
+      if (isSelected || isAmbulance) {
         marker.openPopup();
       }
 
@@ -132,7 +169,9 @@ export default function MapView({
     });
 
     if (bounds.length > 1) {
-      leafletMapRef.current.fitBounds(bounds, { padding: [40, 40] });
+      leafletMapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    } else if (bounds.length === 1 && !center) {
+      leafletMapRef.current.setView(bounds[0], 14);
     }
   }, [leafletLoaded, markers, draggableMarker, onLocationChange, onMarkerClick, selectedMarkerIndex, key]);
 

@@ -2,6 +2,7 @@ const express = require('express');
 const auth = require('../middleware/authMiddleware');
 const {
   getProfile,
+  getActiveRide,
   updateStatus,
   acceptRequest,
   rejectRequest,
@@ -14,6 +15,7 @@ const router = express.Router();
 router.use(auth(['driver']));
 
 router.get('/profile', getProfile);
+router.get('/ambulance-requests/active', getActiveRide);
 router.patch('/status', updateStatus);
 router.patch('/ambulance-requests/:id/accept', acceptRequest);
 router.patch('/ambulance-requests/:id/reject', rejectRequest);

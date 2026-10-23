@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { getSocket } from '../services/socketService';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { connectSocket, disconnectSocket, getSocket } from '../services/socketService';
 import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
@@ -10,11 +10,12 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     if (!token) {
+      disconnectSocket();
       setConnected(false);
       return;
     }
 
-    const socket = getSocket();
+    const socket = connectSocket(token);
     if (!socket) return;
 
     const onConnect = () => setConnected(true);
@@ -30,17 +31,19 @@ export function SocketProvider({ children }) {
     };
   }, [token]);
 
-  const subscribe = (event, handler) => {
+  const subscribe = useCallback((event, handler) => {
     const socket = getSocket();
     if (!socket) return () => {};
     socket.on(event, handler);
-    return () => socket.off(event, handler);
-  };
+    return () => {
+      socket.off(event, handler);
+    };
+  }, []);
 
-  const emit = (event, data) => {
+  const emit = useCallback((event, data) => {
     const socket = getSocket();
     if (socket) socket.emit(event, data);
-  };
+  }, []);
 
   return (
     <SocketContext.Provider value={{ connected, subscribe, emit }}>

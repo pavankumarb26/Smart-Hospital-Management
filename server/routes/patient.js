@@ -7,6 +7,7 @@ const {
   getMyBedRequests,
   getAvailableAmbulances,
   createAmbulanceRequest,
+  cancelAmbulanceRequest,
   getActiveAmbulanceRequest,
 } = require('../controllers/patientController');
 
@@ -20,6 +21,7 @@ router.post('/bed-requests', createBedRequest);
 router.get('/bed-requests/mine', getMyBedRequests);
 router.post('/ambulance-requests/nearby', getAvailableAmbulances);
 router.post('/ambulance-requests', ambulanceLimiter, createAmbulanceRequest);
+router.patch('/ambulance-requests/:id/cancel', cancelAmbulanceRequest);
 router.get('/ambulance-requests/active', getActiveAmbulanceRequest);
 
 module.exports = router;

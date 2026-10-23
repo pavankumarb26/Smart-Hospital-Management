@@ -29,23 +29,40 @@ const initSocket = (io) => {
     }
 
     socket.on('driver:locationUpdate', async ({ driverId, ambulanceId, lat, lng }) => {
-      if (role !== 'driver' || id !== driverId) return;
+      if (role !== 'driver' || String(id) !== String(driverId)) return;
 
-      await Ambulance.findByIdAndUpdate(ambulanceId, {
-        location: { type: 'Point', coordinates: [lng, lat] },
-        lastSeen: new Date(),
-      });
+      const pLat = parseFloat(lat);
+      const pLng = parseFloat(lng);
+      if (isNaN(pLat) || isNaN(pLng)) return;
+
+      const targetAmbId = ambulanceId || socket.user.ambulanceId;
+      if (targetAmbId) {
+        await Ambulance.findByIdAndUpdate(targetAmbId, {
+          location: { type: 'Point', coordinates: [pLng, pLat] },
+          lastSeen: new Date(),
+        });
+      }
 
       const driver = await Driver.findById(driverId);
       if (driver) {
-        const payload = { driverId, ambulanceId, lat, lng };
-        io.to(`hospital:${driver.hospitalId}`).emit('ambulance:locationUpdate', payload);
+        const payload = {
+          driverId,
+          ambulanceId: targetAmbId || driver.ambulanceId,
+          lat: pLat,
+          lng: pLng,
+          updatedAt: new Date(),
+        };
+
+        if (driver.hospitalId) {
+          io.to(`hospital:${driver.hospitalId}`).emit('ambulance:locationUpdate', payload);
+        }
 
         const AmbulanceRequest = require('../models/AmbulanceRequest');
         const activeReq = await AmbulanceRequest.findOne({
           driverId,
-          status: { $in: ['accepted', 'in_progress'] },
-        });
+          status: { $in: ['requested', 'accepted', 'in_progress'] },
+        }).sort({ createdAt: -1 });
+
         if (activeReq) {
           io.to(`patient:${activeReq.patientId}`).emit('ambulance:locationUpdate', payload);
         }

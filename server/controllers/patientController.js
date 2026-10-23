@@ -108,26 +108,62 @@ const getMyBedRequests = async (req, res, next) => {
 
 const getAvailableAmbulances = async (req, res, next) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, hospitalId } = req.body;
     if (!lat || !lng) return res.status(400).json({ message: 'lat and lng required' });
 
-    const ambulances = await Ambulance.find({
-      status: 'available',
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-          $maxDistance: 30000,
+    const pLat = parseFloat(lat);
+    const pLng = parseFloat(lng);
+
+    const query = { status: 'available' };
+    if (hospitalId) {
+      query.hospitalId = hospitalId;
+    }
+
+    // 1. Try to find ambulances within 50km
+    let ambulances = [];
+    try {
+      ambulances = await Ambulance.find({
+        ...query,
+        location: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [pLng, pLat] },
+            $maxDistance: 50000,
+          },
         },
-      },
-    }).populate('hospitalId', 'name');
+      }).populate('hospitalId', 'name');
+    } catch {
+      ambulances = [];
+    }
+
+    // 2. If none within 50km, expand search up to 250km
+    if (!ambulances.length) {
+      try {
+        ambulances = await Ambulance.find({
+          ...query,
+          location: {
+            $near: {
+              $geometry: { type: 'Point', coordinates: [pLng, pLat] },
+              $maxDistance: 250000,
+            },
+          },
+        }).populate('hospitalId', 'name');
+      } catch {
+        ambulances = [];
+      }
+    }
+
+    // 3. Fallback: return any available ambulances (so patient is never stranded)
+    if (!ambulances.length) {
+      ambulances = await Ambulance.find(query).populate('hospitalId', 'name');
+    }
 
     const results = ambulances.map((a) => {
-      const coords = a.location.coordinates;
-      const dLat = (coords[1] - parseFloat(lat)) * Math.PI / 180;
-      const dLng = (coords[0] - parseFloat(lng)) * Math.PI / 180;
+      const coords = a.location?.coordinates || [0, 0];
+      const dLat = (coords[1] - pLat) * Math.PI / 180;
+      const dLng = (coords[0] - pLng) * Math.PI / 180;
       const dist =
         Math.sin(dLat / 2) ** 2 +
-        Math.cos(parseFloat(lat) * Math.PI / 180) *
+        Math.cos(pLat * Math.PI / 180) *
         Math.cos(coords[1] * Math.PI / 180) *
         Math.sin(dLng / 2) ** 2;
       const distance = 6371 * 2 * Math.atan2(Math.sqrt(dist), Math.sqrt(1 - dist));
@@ -144,6 +180,8 @@ const getAvailableAmbulances = async (req, res, next) => {
       };
     });
 
+    results.sort((a, b) => a.distance - b.distance);
+
     res.json(results);
   } catch (error) {
     next(error);
@@ -154,6 +192,16 @@ const createAmbulanceRequest = async (req, res, next) => {
   try {
     const { ambulanceId, driverId, hospitalId, lat, lng } = req.body;
 
+    const existing = await AmbulanceRequest.findOne({
+      patientId: req.user.id,
+      status: { $in: ['requested', 'accepted', 'in_progress'] },
+    });
+    if (existing) {
+      return res.status(400).json({ message: 'You already have an active ambulance request' });
+    }
+
+    const patientUser = await require('../models/User').findById(req.user.id);
+
     const request = await AmbulanceRequest.create({
       patientId: req.user.id,
       ambulanceId,
@@ -162,14 +210,56 @@ const createAmbulanceRequest = async (req, res, next) => {
       patientLocation: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
     });
 
-    const io = req.app.get('io');
-    io.to(`driver:${driverId}`).emit('ambulance:request', {
-      requestId: request._id,
-      patientId: req.user.id,
-      patientLocation: { lat: parseFloat(lat), lng: parseFloat(lng) },
-    });
+    const populatedRequest = await AmbulanceRequest.findById(request._id)
+      .populate('driverId', 'name phone')
+      .populate('ambulanceId', 'vehicleNumber location')
+      .populate('hospitalId', 'name location');
 
-    res.status(201).json({ request });
+    const io = req.app.get('io');
+    if (driverId) {
+      io.to(`driver:${driverId}`).emit('ambulance:request', {
+        requestId: request._id,
+        patientId: req.user.id,
+        patientName: patientUser?.name || 'Emergency Patient',
+        patientPhone: patientUser?.phone || '',
+        patientLocation: { lat: parseFloat(lat), lng: parseFloat(lng) },
+      });
+    }
+
+    res.status(201).json({ request: populatedRequest });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const cancelAmbulanceRequest = async (req, res, next) => {
+  try {
+    const request = await AmbulanceRequest.findOne({
+      _id: req.params.id,
+      patientId: req.user.id,
+    });
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+
+    if (['completed', 'cancelled', 'rejected'].includes(request.status)) {
+      return res.status(400).json({ message: 'Request is already closed' });
+    }
+
+    request.status = 'cancelled';
+    await request.save();
+
+    if (request.driverId) {
+      await Driver.findByIdAndUpdate(request.driverId, { status: 'available' });
+      if (request.ambulanceId) {
+        await Ambulance.findByIdAndUpdate(request.ambulanceId, { status: 'available' });
+      }
+      const io = req.app.get('io');
+      io.to(`driver:${request.driverId}`).emit('ambulance:cancelled', {
+        requestId: request._id,
+        message: 'Patient has cancelled the ambulance request',
+      });
+    }
+
+    res.json({ message: 'Request cancelled successfully', request });
   } catch (error) {
     next(error);
   }
@@ -181,6 +271,7 @@ const getActiveAmbulanceRequest = async (req, res, next) => {
       patientId: req.user.id,
       status: { $in: ['requested', 'accepted', 'in_progress'] },
     })
+      .sort({ createdAt: -1 })
       .populate('driverId', 'name phone')
       .populate('ambulanceId', 'vehicleNumber location')
       .populate('hospitalId', 'name location');
@@ -197,5 +288,6 @@ module.exports = {
   getMyBedRequests,
   getAvailableAmbulances,
   createAmbulanceRequest,
+  cancelAmbulanceRequest,
   getActiveAmbulanceRequest,
 };

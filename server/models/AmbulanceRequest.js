@@ -11,7 +11,7 @@ const ambulanceRequestSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['requested', 'accepted', 'in_progress', 'completed', 'rejected'],
+    enum: ['requested', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled'],
     default: 'requested',
   },
   createdAt: { type: Date, default: Date.now },

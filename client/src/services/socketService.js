@@ -5,15 +5,27 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://smart-hospital-manageme
 let socket = null;
 
 export const connectSocket = (token) => {
-  if (socket?.connected) return socket;
+  if (!token) return null;
+
+  if (socket) {
+    if (socket.auth?.token === token) {
+      if (!socket.connected) {
+        socket.connect();
+      }
+      return socket;
+    }
+    socket.disconnect();
+    socket = null;
+  }
 
   socket = io(API_URL, {
     auth: { token },
     autoConnect: true,
+    transports: ['websocket', 'polling'],
   });
 
   socket.on('connect_error', (err) => {
-    console.error('Socket connection error:', err.message);
+    console.warn('Socket connection error:', err.message);
   });
 
   return socket;
@@ -26,4 +38,10 @@ export const disconnectSocket = () => {
   }
 };
 
-export const getSocket = () => socket;
+export const getSocket = () => {
+  if (!socket) {
+    const token = localStorage.getItem('token');
+    if (token) return connectSocket(token);
+  }
+  return socket;
+};

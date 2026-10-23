@@ -16,27 +16,32 @@ export default function AmbulanceFleet() {
   const [error, setError] = useState('');
   const { subscribe } = useSocketContext();
 
-  const fetchAmbulances = (hospitalLoc) => {
+  const hospitalLocRef = useRef(null);
+  hospitalLocRef.current = hospitalLocation;
+
+  const fetchAmbulances = useCallback((hospitalLoc) => {
+    const loc = hospitalLoc !== undefined ? hospitalLoc : hospitalLocRef.current;
     api.get('/hospital/ambulances').then((r) => {
       setAmbulances(r.data);
       const ambMarkers = r.data
-        .filter((a) => a.location?.coordinates?.[0])
+        .filter((a) => a.location?.coordinates?.[0] != null && a.location?.coordinates?.[1] != null)
         .map((a) => ({
           lat: a.location.coordinates[1],
           lng: a.location.coordinates[0],
           title: `🚚 ${a.vehicleNumber} [${a.status.toUpperCase()}] - Driver: ${a.driverName}`,
+          type: 'ambulance',
         }));
 
-      if (hospitalLoc) {
+      if (loc) {
         setMarkers([
-          { lat: hospitalLoc.lat, lng: hospitalLoc.lng, title: '🏥 Our Hospital Location' },
+          { lat: loc.lat, lng: loc.lng, title: '🏥 Our Hospital Location', type: 'hospital' },
           ...ambMarkers
         ]);
       } else {
         setMarkers(ambMarkers);
       }
     });
-  };
+  }, []);
 
   useEffect(() => {
     api.get('/hospital/profile').then((r) => {
@@ -51,11 +56,13 @@ export default function AmbulanceFleet() {
         fetchAmbulances(null);
       }
     });
+  }, [fetchAmbulances]);
 
-    const unsub1 = subscribe('ambulance:locationUpdate', () => fetchAmbulances(hospitalLocation));
-    const unsub2 = subscribe('ambulance:statusChanged', () => fetchAmbulances(hospitalLocation));
+  useEffect(() => {
+    const unsub1 = subscribe('ambulance:locationUpdate', () => fetchAmbulances());
+    const unsub2 = subscribe('ambulance:statusChanged', () => fetchAmbulances());
     return () => { unsub1(); unsub2(); };
-  }, [hospitalLocation]);
+  }, [subscribe, fetchAmbulances]);
 
   const addFleet = async (e) => {
     e.preventDefault();
